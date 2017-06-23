@@ -2,15 +2,15 @@ package com.webdm.common.tools;
 
 /**
  * 
- * 创建时间：2010-11-18 上午10:27:49
- * @author 冯丙见
+ * CreateTime: 2010-11-18 10:27:49
+ * @author Fengbj
  * @version 1.0
  */
 
 public interface ParamCheck {
 	
 	/**
-	 * 判断参数是否合法
+	 * validate parameter
 	 * @param value
 	 * @return
 	 */

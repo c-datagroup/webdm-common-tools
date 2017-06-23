@@ -11,6 +11,8 @@ import org.apache.http.client.methods.HttpGet;
 import org.apache.http.client.methods.HttpPost;
 import org.apache.http.client.methods.HttpPut;
 import org.apache.http.client.params.ClientPNames;
+import org.apache.http.client.protocol.HttpClientContext;
+import org.apache.http.client.config.RequestConfig;
 import org.apache.http.client.utils.URLEncodedUtils;
 import org.apache.http.conn.HttpClientConnectionManager;
 import org.apache.http.conn.ClientConnectionManager;
@@ -20,7 +22,11 @@ import org.apache.http.conn.ssl.SSLSocketFactory;
 import org.apache.http.entity.StringEntity;
 import org.apache.http.entity.mime.MultipartEntity;
 import org.apache.http.entity.mime.content.StringBody;
+import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.DefaultHttpClient;
+import org.apache.http.impl.client.HttpClients;
+import org.apache.http.impl.conn.BasicHttpClientConnectionManager;
+import org.apache.http.impl.conn.PoolingHttpClientConnectionManager;
 import org.apache.http.impl.conn.tsccm.ThreadSafeClientConnManager;
 import org.apache.http.message.BasicNameValuePair;
 import org.apache.http.params.BasicHttpParams;
@@ -51,6 +57,10 @@ import java.util.zip.GZIPInputStream;
 public class CatchUtil {
 
 	private static Logger logger = Logger.getLogger(CatchUtil.class);
+
+	private static PoolingHttpClientConnectionManager connMrg = new PoolingHttpClientConnectionManager();
+
+	private static IdleConnectionMonitorThread staleMonitor = new IdleConnectionMonitorThread(connMrg);
 
 	/**
 	 * 设置请求参数
@@ -110,6 +120,13 @@ public class CatchUtil {
 		return "";
 	}
 
+	public static void startConnectionMonitor() {
+      staleMonitor.start();
+	}
+
+	public static void shutdownConnectionMonitor() {
+		staleMonitor.shutdown();
+	}
 
 	public static String post(String url, Map<String, Object> map) throws ClientProtocolException, IOException{
 
@@ -552,7 +569,6 @@ public class CatchUtil {
 	 * @return  返回值,当失败是返回null
 	 */
 	public static String getSrc(String url , boolean needEncode) {
-
 		return getSrc(url, needEncode, null);
 
 	}
@@ -573,7 +589,7 @@ public class CatchUtil {
      * @param url 远程地址，例如http://pay.mapbar.com/index.html
      * @return  返回值,当失败是返回null
      */
-    public static String getSrc(HttpClient httpclient, String url , boolean needEncode, String charset, String parentUrl) {
+    public static String getSrc(CloseableHttpClient httpclient, String url , boolean needEncode, String charset, String parentUrl) {
 
 //		if(url != null && url.startsWith("file://")){
 //
@@ -582,21 +598,16 @@ public class CatchUtil {
 //		}
         //设置代理
 
-        httpclient.getParams().setIntParameter(HttpConnectionParams.SO_TIMEOUT, 10000); //超时设置
-        httpclient.getParams().setIntParameter(HttpConnectionParams.CONNECTION_TIMEOUT, 10000);//连接超时
-
-        httpclient.getParams().setParameter("http.useragent", "Mozilla/5.0 (X11; U; Linux i686; zh-CN; rv:1.9.1.2) Gecko/20090803 Fedora/3.5.2-2.fc11 Firefox/3.5.2");
-        //List<BasicHeader> headers = new ArrayList<BasicHeader>();
-        //headers.add(new BasicHeader("User-Agent", "Mozilla/4.0 (compatible; MSIE 7.0; Windows NT 5.1)"));
-        // httpclient.getParams().setParameter("http.default-headers", headers);
-        //httpclient.getParams().setIntParameter(HttpConnectionParams., 5000);//连接超时
-
-
-        if(httpclient instanceof DefaultHttpClient)
-            ((DefaultHttpClient)httpclient).setHttpRequestRetryHandler(new Retry());
-        //HttpPost httpPost = new HttpPost(url);
         HttpGet get = new HttpGet(url);
         //httpPost.getParams().setBooleanParameter(arg0, arg1)
+		int timeout = 10;
+		RequestConfig requestConfig = RequestConfig.custom()
+				.setSocketTimeout(timeout * 1000)
+				.setConnectionRequestTimeout(timeout * 1000)
+				.setConnectTimeout(timeout * 1000)
+				.build();
+		get.setConfig(requestConfig);
+		get.addHeader("User-Agent", "Mozilla/5.0 (X11; U; Linux i686; zh-CN; rv:1.9.1.2) Gecko/20090803 Fedora/3.5.2-2.fc11 Firefox/3.5.2");
 
         if(parentUrl != null)
             get.addHeader("Referer", parentUrl);
@@ -604,7 +615,6 @@ public class CatchUtil {
         logger.debug("请求地址：" + get.getURI());
         HttpResponse response = null;
         try {
-			HttpClientConnectionManager connectionManager = (HttpClientConnectionManager)httpclient.getConnectionManager();
             response = httpclient.execute(get);
         } catch (IOException ex) {
             logger.error("Util#httpclient.execute(httpost) " + ex.toString());
@@ -764,8 +774,7 @@ public class CatchUtil {
 	 * @return  返回值,当失败是返回null
 	 */
 	public static String getSrc(String url , boolean needEncode, String charset, String parentUrl) {
-
-
+		/*
         if(url.startsWith("https:")){
 
             DefaultHttpClient defaultHttpClient = new DefaultHttpClient();
@@ -801,8 +810,10 @@ public class CatchUtil {
 
             return getSrc(defaultHttpClient, url, needEncode, charset, parentUrl);
 
-        }else {
-            return getSrc(new DefaultHttpClient(), url, needEncode, charset, parentUrl);
+        }else */
+		{
+			CloseableHttpClient httpClient = HttpClients.custom().setConnectionManager(connMrg).build();
+            return getSrc(httpClient, url, needEncode, charset, parentUrl);
         }
 
 
